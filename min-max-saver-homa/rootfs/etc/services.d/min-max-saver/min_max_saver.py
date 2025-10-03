@@ -23,6 +23,7 @@
 # 2025/07/27 Added support for Home Assistant add-on, drop support for Python2, Pylint cleanup
 # 2025/07/29 Switched to CallbackAPIVersion.VERSION2
 # 2025/07/30 Switched to logging output instead of print statements
+# 2025/10/03 Using debug setting from Home Assistant config
 
 import sys
 import time
@@ -35,21 +36,20 @@ import bashio_logging  # provides logging output like bashio, must be imported b
 import logging  # pylint: disable=wrong-import-order
 import mqtt_config  # gets host, port, user, pwd, ca_certs from Home Assistant config
 
-# config here ... # TODO: use debug from config
-DEBUG = False
-
 try:
     with open("/data/options.json", "r", encoding="utf-8") as f:
         config = json.load(f)
 except Exception as e:  # pylint: disable=broad-except
     logging.error("Loading Home Assistant configuration file: %s", e)
     sys.exit(1)
+debug = config.get('debug')
 systemId = config.get("homa_system_id")  # e.g. "123456-min-max-saver"
 
 saver_arr = [] # buffer of registered saver, contents:
 # {'saver': min/max, 'system': <systemId>, 'control': <controlId>,
 #  'time': reset interval in seconds, 'nextReset': next reset time in seconds,
 #  'value': min/max value}
+
 
 def build_topic(system_id, t1 = None, t2 = None, t3 = None):
     """Create topic string."""
@@ -66,6 +66,7 @@ def build_topic(system_id, t1 = None, t2 = None, t3 = None):
     logging.debug("build_topic(): '%s'", topic)
     return topic
 
+
 def get_next_reset_time(time_value):
     """Calculate the next reset time based on the current time and the given time value."""
     current_time = time.time()
@@ -77,6 +78,7 @@ def get_next_reset_time(time_value):
     logging.debug("get_next_reset_time(): %s", time_str)
     return next_reset_time
 
+
 def get_saver(saver, system, control):
     """Get the saver dictionary for the given saver, system, and control."""
     for saver_dict in saver_arr:
@@ -85,6 +87,7 @@ def get_saver(saver, system, control):
             return saver_dict
     logging.debug("get_saver(): %s, system: %s, control: %s NOT found.", saver, system, control)
     return False
+
 
 def add_saver(client, saver, system, control, time_str):
     """Add or update a saver with the given parameters."""
@@ -97,7 +100,7 @@ def add_saver(client, saver, system, control, time_str):
     else:
         logging.debug("add_saver(): %s, system: %s, control: %s, time %s updated.", saver, system, control, time_value)
         saver_dict['time'] = time_value
-    if DEBUG:
+    if debug:
         logging.debug("saver_arr:")
         for entry in saver_arr:
             print(json.dumps(entry, indent=4, ensure_ascii=False))
@@ -105,6 +108,7 @@ def add_saver(client, saver, system, control, time_str):
     # e.g. "/devices/123456-energy/controls/Current Power"
     client.subscribe(build_topic(system, "controls", control))
     client.subscribe(build_topic(system, "controls", control, "meta/unit"))
+
 
 def remove_saver(client, saver, system, control):
     """Remove a saver with the given parameters."""
@@ -121,6 +125,7 @@ def remove_saver(client, saver, system, control):
         client.publish(build_topic(system, "controls", control + " " + saver), "", retain=True)
         client.publish(build_topic(system, "controls", control + " " + saver, "meta/unit"), "", retain=True)
         saver_arr.remove(saver_dict)
+
 
 def update_saver(client, system, control, value):
     """Update the min/max saver with the given value."""
@@ -149,6 +154,7 @@ def update_saver(client, system, control, value):
             saver_dict['value'] = value
             client.publish(build_topic(system, "controls", control + " max"), value, retain=True)
 
+
 def update_saver_unit(client, system, control, unit):
     """Update the unit of the min/max saver."""
     saver_dict = get_saver("min", system, control)
@@ -161,6 +167,7 @@ def update_saver_unit(client, system, control, unit):
         logging.debug("update_saver_unit(): max, system: %s, control: %s, unit: %s updated.", system, control, unit)
         client.publish(build_topic(system, "controls", control + " max", "meta/unit"), unit, retain=True)
 
+
 def on_connect(client, userdata, flags, reason_code, properties):  # pylint: disable=unused-argument
     """The callback for when the client receives a CONNACK response from the broker."""
     logging.debug("on_connect(): Connected with result code %s", str(reason_code))
@@ -169,6 +176,7 @@ def on_connect(client, userdata, flags, reason_code, properties):  # pylint: dis
     # subscribe topic "/sys/<systemId>/<min/max>/<minSystemId>/<minControlId>"
     # e.g. "/sys/123456-min-max-saver/min/123456-energy/Current Power"
     client.subscribe(f"/sys/{systemId}/+/+/+")
+
 
 def on_message(client, userdata, msg):  # pylint: disable=unused-argument
     """The callback for when a PUBLISH message is received from the broker."""
@@ -198,9 +206,11 @@ def on_message(client, userdata, msg):  # pylint: disable=unused-argument
     else:
         print("[ERROR] on_message(): Unkown topic '%s'.", msg.topic)
 
+
 def on_publish(client, userdata, mid, reason_code, properties):  # pylint: disable=unused-argument
     """The callback for when a message is published to the broker."""
     logging.debug("on_publish(): message send %s", str(mid))
+
 
 def parse_args():
     """Parse command line arguments."""
@@ -210,9 +220,12 @@ def parse_args():
     parser.add_argument('--brokerPort', type=int, default=None, help='Set MQTT broker port')
     return parser.parse_args()
 
+
+# main program
 args = parse_args()
 if args.d:
-    DEBUG = True
+    debug = True
+if debug:
     logging.getLogger().setLevel(logging.DEBUG)
     logging.info("Debug output enabled.")
 if args.brokerHost is not None:
@@ -223,7 +236,6 @@ if args.brokerPort is not None:
     mqtt_config.port = args.brokerPort
 
 # connect to MQTT broker
-#mqttc = mqtt.Client()
 mqttc = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION2)
 mqttc.on_connect = on_connect
 mqttc.on_message = on_message
