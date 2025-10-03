@@ -1,0 +1,28 @@
+# https://developers.home-assistant.io/docs/add-ons/configuration#add-on-config
+name: HomA MQTT min/max saver
+version: 0.1.2
+slug: min-max-saver-homa
+description: A universal min/max saver for the HomA MQTT framework
+url: https://github.com/hass-hmueller01/addon-min-max-saver-homa
+# remove the image tag if you want to use it as a local add-on
+#image: "hmueller01/homeassistant-addon-min-max-saver-homa-{arch}" # on https://hub.docker.com
+arch:
+  - aarch64
+  - amd64
+  - armhf
+  - armv7
+  - i386
+init: false
+options:
+  homa_system_id: "123456-min-max-saver"
+  debug: false
+schema:
+  homa_system_id: "str"
+  mqtt_host: "str?"
+  mqtt_port: "int?"
+  mqtt_user: "str?"
+  mqtt_password: "str?"
+  mqtt_ca_certs: "str?"
+  debug: "bool"
+services:
+  - mqtt:need

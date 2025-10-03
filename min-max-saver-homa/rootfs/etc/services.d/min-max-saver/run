@@ -1,0 +1,10 @@
+#!/usr/bin/with-contenv bashio
+# ==============================================================================
+# Start the min-max-saver service
+# s6-overlay docs: https://github.com/just-containers/s6-overlay
+# ==============================================================================
+
+bashio::log.info "min-max-saver service starting ..."
+
+# Start the min-max-saver service
+exec python3 /etc/services.d/min-max-saver/min_max_saver.py
