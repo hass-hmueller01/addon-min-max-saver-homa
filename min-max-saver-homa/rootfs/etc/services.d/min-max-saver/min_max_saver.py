@@ -24,6 +24,7 @@
 # 2025/07/29 Switched to CallbackAPIVersion.VERSION2
 # 2025/07/30 Switched to logging output instead of print statements
 # 2025/10/03 Using debug setting from Home Assistant config
+# 2025/10/03 Load Home Assistant options only once (refactored mqtt_config.py and renamed to config.py)
 
 import sys
 import time
@@ -34,16 +35,11 @@ import paho.mqtt.client as mqtt
 from paho.mqtt.enums import CallbackAPIVersion
 import bashio_logging  # provides logging output like bashio, must be imported before logging #pylint: disable=unused-import
 import logging  # pylint: disable=wrong-import-order
-import mqtt_config  # gets host, port, user, pwd, ca_certs from Home Assistant config
+import config  # provides Home Assistant config (and gets MQTT host, port, user, pwd, ca_certs)
 
-try:
-    with open("/data/options.json", "r", encoding="utf-8") as f:
-        config = json.load(f)
-except Exception as e:  # pylint: disable=broad-except
-    logging.error("Loading Home Assistant configuration file: %s", e)
-    sys.exit(1)
-debug = config.get('debug')
-systemId = config.get("homa_system_id")  # e.g. "123456-min-max-saver"
+
+debug = config.options.get('debug')
+systemId = config.options.get("homa_system_id")  # e.g. "123456-min-max-saver"
 
 saver_arr = [] # buffer of registered saver, contents:
 # {'saver': min/max, 'system': <systemId>, 'control': <controlId>,
@@ -229,23 +225,23 @@ if debug:
     logging.getLogger().setLevel(logging.DEBUG)
     logging.info("Debug output enabled.")
 if args.brokerHost is not None:
-    logging.debug("set mqtt_config.host = %s", args.brokerHost)
-    mqtt_config.host = args.brokerHost
+    logging.debug("set config.host = %s", args.brokerHost)
+    config.mqtt_host = args.brokerHost
 if args.brokerPort is not None:
-    logging.debug("set mqtt_config.port = %s", args.brokerPort)
-    mqtt_config.port = args.brokerPort
+    logging.debug("set config.port = %s", args.brokerPort)
+    config.mqtt_port = args.brokerPort
 
 # connect to MQTT broker
 mqttc = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION2)
 mqttc.on_connect = on_connect
 mqttc.on_message = on_message
 mqttc.on_publish = on_publish
-if mqtt_config.ca_certs != "":
+if config.mqtt_ca_certs != "":
     #mqttc.tls_insecure_set(True) # Do not use this "True" in production!
-    mqttc.tls_set(mqtt_config.ca_certs, certfile=None, keyfile=None, cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLSv1_2, ciphers=None)
-mqttc.username_pw_set(mqtt_config.user, password=mqtt_config.pwd)
-logging.debug("Connecting to host '%s', port '%s'", mqtt_config.host, mqtt_config.port)
-mqttc.connect(mqtt_config.host, port=mqtt_config.port)
+    mqttc.tls_set(config.mqtt_ca_certs, certfile=None, keyfile=None, cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLSv1_2, ciphers=None)
+mqttc.username_pw_set(config.mqtt_user, password=config.mqtt_pwd)
+logging.debug("Connecting to host '%s', port '%s'", config.mqtt_host, config.mqtt_port)
+mqttc.connect(config.mqtt_host, port=config.mqtt_port)
 mqttc.loop_start()
 
 while True:
