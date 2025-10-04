@@ -13,6 +13,7 @@
 
 import ssl
 import paho.mqtt.client as mqtt
+from paho.mqtt.enums import CallbackAPIVersion
 import config  # provides Home Assistant config (and gets MQTT host, port, user, pwd, ca_certs)
 
 # config here ...
@@ -41,9 +42,9 @@ def homa_init(mqttc):
 
 
 # The callback for when the client receives a CONNACK response from the broker.
-def on_connect(client, userdata, flags, rc):  # pylint: disable=unused-argument
+def on_connect(client, userdata, flags, reason_code, properties):  # pylint: disable=unused-argument
     """The callback for when the client receives a CONNACK response from the broker."""
-    if debug: print("on_connect(): Connected with result code "+ str(rc))
+    if debug: print("on_connect(): Connected with result code "+ str(reason_code))
     # Subscribing in on_connect() means that if we lose the connection and
     # reconnect then subscriptions will be renewed.
 
@@ -51,11 +52,12 @@ def on_connect(client, userdata, flags, rc):  # pylint: disable=unused-argument
 # The callback for when a PUBLISH message is received from the broker.
 def on_message(client, userdata, msg):  # pylint: disable=unused-argument
     """The callback for when a PUBLISH message is received from the broker."""
-    if debug: print("on_message(): "+ msg.topic+ ":"+ str(msg.payload))
+    payload_str = msg.payload.decode("utf-8")  # payload is bytes since API version 2
+    if debug: print("on_message(): "+ msg.topic+ ":"+ payload_str)
 
 
 # The callback for when a message is published to the broker.
-def on_publish(client, userdata, mid):  # pylint: disable=unused-argument
+def on_publish(client, userdata, mid, reason_code, properties):  # pylint: disable=unused-argument
     """The callback for when a message is published to the broker."""
     if debug: print("on_publish(): message send "+ str(mid))
 
@@ -63,7 +65,7 @@ def on_publish(client, userdata, mid):  # pylint: disable=unused-argument
 def main():
     """Main function to setup and run the min-max saver."""
     # connect to MQTT broker
-    mqttc = mqtt.Client()
+    mqttc = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION2)
     mqttc.on_connect = on_connect
     mqttc.on_message = on_message
     mqttc.on_publish = on_publish
