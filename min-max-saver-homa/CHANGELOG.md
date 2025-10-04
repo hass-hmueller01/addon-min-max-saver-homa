@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.4] - 2025-10-03
 - Load Home Assistant options only once (refactored mqtt_config.py and renamed to config.py)
+- Updated setup.py script
 
 ## [0.1.3] - 2025-10-03
 - Using debug setting from Home Assistant config
