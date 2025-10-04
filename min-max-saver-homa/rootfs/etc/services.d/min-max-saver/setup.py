@@ -9,7 +9,7 @@
 # Holger Mueller
 # 2017/10/24 initial revision
 # 2020/10/15 checked Python3 compatibility
-# 2025/07/27 Added support for Home Assistant add-on system
+# 2025/10/04 Added support for Home Assistant add-on system
 
 import ssl
 import paho.mqtt.client as mqtt
