@@ -10,15 +10,18 @@
 # 2017/10/24 initial revision
 # 2020/10/15 checked Python3 compatibility
 # 2025/10/04 Added support for Home Assistant add-on system
+# 2024/10/06 Added support for MQTT connection error handling
 
 import ssl
+import sys
+import threading
 import paho.mqtt.client as mqtt
 from paho.mqtt.enums import CallbackAPIVersion
 import config  # provides Home Assistant config (and gets MQTT host, port, user, pwd, ca_certs)
 
 # config here ...
 debug = False
-systemId = config.options.get("homa_system_id")  # e.g. "123456-min-max-saver"
+systemId = config.options.get("homa_system_id", "123456-min-max-saver")  # e.g. "123456-min-max-saver"
 
 # config min/max saver here
 mqtt_arr = [
@@ -29,6 +32,8 @@ mqtt_arr = [
     {'saver': 'max', 'system': '123456-vito', 'control': 'Raumtemperatur', 'time': '24'},
     {'saver': 'min', 'system': '123456-energy', 'control': 'Current Power', 'time': '24'},
     {'saver': 'max', 'system': '123456-energy', 'control': 'Current Power', 'time': '24'}]
+
+connected_event = threading.Event()
 
 
 def homa_init(mqttc):
@@ -44,9 +49,11 @@ def homa_init(mqttc):
 # The callback for when the client receives a CONNACK response from the broker.
 def on_connect(client, userdata, flags, reason_code, properties):  # pylint: disable=unused-argument
     """The callback for when the client receives a CONNACK response from the broker."""
-    if debug: print("on_connect(): Connected with result code "+ str(reason_code))
-    # Subscribing in on_connect() means that if we lose the connection and
-    # reconnect then subscriptions will be renewed.
+    if reason_code == 0:
+        if debug: print("on_connect(): Connected with result code "+ str(reason_code))
+        connected_event.set()  # Verbindung erfolgreich
+    else:
+        print(f"on_connect(): Error while connecting to the MQTT broker: {reason_code}")
 
 
 # The callback for when a PUBLISH message is received from the broker.
@@ -73,10 +80,16 @@ def main():
         #mqttc.tls_insecure_set(True) # Do not use this "True" in production!
         mqttc.tls_set(config.mqtt_ca_certs, certfile=None, keyfile=None, cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLSv1_2, ciphers=None)
     mqttc.username_pw_set(config.mqtt_user, password=config.mqtt_pwd)
-    mqttc.connect(config.mqtt_host, port=config.mqtt_port)
+    rc = mqttc.connect(config.mqtt_host, port=config.mqtt_port)
+    if rc != 0:
+        print(f"Error at mqttc.connect(): {rc}")
+        sys.exit(1)
     mqttc.loop_start()
-
-    homa_init(mqttc)        # setup HomA MQTT device and control settings
+    if not connected_event.wait(timeout=5):  # wait max. 5s
+        print("Error at MQTT connection.")
+        mqttc.loop_stop()
+        sys.exit(1)
+    homa_init(mqttc)  # setup HomA MQTT device and control settings
 
     # wait until all queued topics are published
     mqttc.loop_stop()
