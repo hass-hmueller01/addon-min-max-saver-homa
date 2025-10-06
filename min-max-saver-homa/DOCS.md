@@ -26,3 +26,23 @@ It's possible to save only the min or max value if configured accordingly.
 The add-on supports the internal (Home Assistant) or an external MQTT broker. To configure the external MQTT broker you have to activate the _"Show unused optional configuration options"_.
 
 You can modify the subscribed topic id `<systemId>` by setting _"HomA System ID"_.
+
+A sample config Python script to setup the `/sys/<systemId>/...` messages is located in
+
+[./rootfs/etc/services.d/min-max-saver/setup.py](./rootfs/etc/services.d/min-max-saver/setup.py)
+
+It runs outside the Home Assistant docker environment by eigther setting the environment variables `MQTT_HOST`, `MQTT_PORT`, `MQTT_USER`, `MQTT_PASSWORD` or providing a config file `~/.config/mqtt_config.py`.
+```shell
+./setup.py
+[12:00:00] INFO: Home Assistant configuration file not found: /data/options.json
+[12:00:00] INFO: No environment variables found: MQTT_HOST, MQTT_PORT, MQTT_USER, MQTT_PASSWORD
+[12:00:00] INFO: Using mqtt_config.py configured MQTT Host: mqtt:1883
+Publishing HomA setup data to mqtt  (systemId 123456-min-max-saver) ...
+/sys/123456-min-max-saver/max/123456-windsensor/Wind speed => 24
+/sys/123456-min-max-saver/min/123456-vito/Aussentemperatur => 24
+/sys/123456-min-max-saver/max/123456-vito/Aussentemperatur => 24
+/sys/123456-min-max-saver/min/123456-vito/Raumtemperatur => 24
+/sys/123456-min-max-saver/max/123456-vito/Raumtemperatur => 24
+/sys/123456-min-max-saver/min/123456-energy/Current Power => 24
+/sys/123456-min-max-saver/max/123456-energy/Current Power => 24
+```
