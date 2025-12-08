@@ -8,4 +8,3 @@ labels:
   org.opencontainers.image.description: "HomA MQTT min/max saver add-on."
   org.opencontainers.image.source: "https://github.com/hass-hmueller01/addon-min-max-saver-homa"
   org.opencontainers.image.licenses: "MIT License"
-squash: true
