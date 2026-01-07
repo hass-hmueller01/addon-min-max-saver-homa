@@ -11,17 +11,20 @@
 # 2020/10/15 checked Python3 compatibility
 # 2025/10/04 Added support for Home Assistant add-on system
 # 2024/10/06 Added support for MQTT connection error handling
+# 2025/12/26 Refactored to use addon module
 
 import ssl
 import sys
 import threading
 import paho.mqtt.client as mqtt
 from paho.mqtt.enums import CallbackAPIVersion
-import config  # provides Home Assistant config (and gets MQTT host, port, user, pwd, ca_certs)
+
+import addon  # provides logging like bashio, provides Home Assistant / MQTT broker config
+
 
 # config here ...
-debug = False
-systemId = config.options.get("homa_system_id", "123456-min-max-saver")  # e.g. "123456-min-max-saver"
+debug: bool = False
+systemId = addon.config.get("homa_system_id", "123456-min-max-saver")  # e.g. "123456-min-max-saver"
 
 # config min/max saver here
 mqtt_arr = [
@@ -38,7 +41,7 @@ connected_event = threading.Event()
 
 def homa_init(mqttc):
     """Publish HomA setup messages for min/max saver."""
-    print(f"Publishing HomA setup data to {config.mqtt_host} (systemId {systemId}) ...")
+    print(f"Publishing HomA setup data to {addon.mqtt_host} (systemId {systemId}) ...")
     # setup controls
     for mqtt_dict in mqtt_arr:
         topic = f"/sys/{systemId}/{mqtt_dict['saver']}/{mqtt_dict['system']}/{mqtt_dict['control']}"
@@ -76,11 +79,11 @@ def main():
     mqttc.on_connect = on_connect
     mqttc.on_message = on_message
     mqttc.on_publish = on_publish
-    if config.mqtt_ca_certs != "":
+    if addon.mqtt_ca_certs != "":
         #mqttc.tls_insecure_set(True) # Do not use this "True" in production!
-        mqttc.tls_set(config.mqtt_ca_certs, certfile=None, keyfile=None, cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLSv1_2, ciphers=None)
-    mqttc.username_pw_set(config.mqtt_user, password=config.mqtt_pwd)
-    rc = mqttc.connect(config.mqtt_host, port=config.mqtt_port)
+        mqttc.tls_set(addon.mqtt_ca_certs, certfile=None, keyfile=None, cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLSv1_2, ciphers=None)
+    mqttc.username_pw_set(addon.mqtt_user, password=addon.mqtt_pwd)
+    rc = mqttc.connect(addon.mqtt_host, port=addon.mqtt_port)
     if rc != 0:
         print(f"Error at mqttc.connect(): {rc}")
         sys.exit(1)
