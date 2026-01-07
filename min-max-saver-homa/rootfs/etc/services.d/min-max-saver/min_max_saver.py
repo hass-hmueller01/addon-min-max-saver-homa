@@ -25,21 +25,22 @@
 # 2025/07/30 Switched to logging output instead of print statements
 # 2025/10/03 Using debug setting from Home Assistant config
 # 2025/10/03 Load Home Assistant options only once (refactored mqtt_config.py and renamed to config.py)
+# 2025/12/27 Refactored to use addon module
+# 2026/01/07 Using addon module installed from git in venv
 
-import sys
-import time
 import argparse
 import json
 import ssl
+import sys
+import time
 import paho.mqtt.client as mqtt
 from paho.mqtt.enums import CallbackAPIVersion
-import bashio_logging  # provides logging output like bashio, must be imported before logging #pylint: disable=unused-import
-import logging  # pylint: disable=wrong-import-order
-import config  # provides Home Assistant config (and gets MQTT host, port, user, pwd, ca_certs)
+
+import addon  # provides logging like bashio, provides Home Assistant / MQTT broker config
 
 
-debug = config.options.get('debug')
-systemId = config.options.get("homa_system_id")  # e.g. "123456-min-max-saver"
+debug = addon.config.get('debug')
+systemId = addon.config.get("homa_system_id")  # e.g. "123456-min-max-saver"
 
 saver_arr = [] # buffer of registered saver, contents:
 # {'saver': min/max, 'system': <systemId>, 'control': <controlId>,
@@ -50,7 +51,7 @@ saver_arr = [] # buffer of registered saver, contents:
 def build_topic(system_id, t1 = None, t2 = None, t3 = None):
     """Create topic string."""
     if not t1:
-        print("ERROR get_topic(): t1 not specified!")
+        addon.log.error("get_topic(): t1 not specified!")
         sys.exit(1)
     topic = f"/devices/{system_id}"
     if t1:
@@ -59,7 +60,7 @@ def build_topic(system_id, t1 = None, t2 = None, t3 = None):
         topic += "/"+ t2
     if t3:
         topic += "/"+ t3
-    logging.debug("build_topic(): '%s'", topic)
+    addon.log.debug("build_topic(): '%s'", topic)
     return topic
 
 
@@ -71,7 +72,7 @@ def get_next_reset_time(time_value):
     while next_reset_time < current_time:
         next_reset_time += time_value
     time_str = time.strftime("%a, %d %b %Y %H:%M:%S", time.localtime(next_reset_time))
-    logging.debug("get_next_reset_time(): %s", time_str)
+    addon.log.debug("get_next_reset_time(): %s", time_str)
     return next_reset_time
 
 
@@ -79,9 +80,9 @@ def get_saver(saver, system, control):
     """Get the saver dictionary for the given saver, system, and control."""
     for saver_dict in saver_arr:
         if saver_dict['saver'] == saver and saver_dict['system'] == system and saver_dict['control'] == control:
-            logging.debug("get_saver(): %s, system: %s, control: %s found.", saver, system, control)
+            addon.log.debug("get_saver(): %s, system: %s, control: %s found.", saver, system, control)
             return saver_dict
-    logging.debug("get_saver(): %s, system: %s, control: %s NOT found.", saver, system, control)
+    addon.log.debug("get_saver(): %s, system: %s, control: %s NOT found.", saver, system, control)
     return False
 
 
@@ -90,14 +91,14 @@ def add_saver(client, saver, system, control, time_str):
     time_value = float(time_str) * 3600 # convert time string in hours to seconds
     saver_dict = get_saver(saver, system, control)
     if not saver_dict:
-        logging.debug("add_saver(): %s, system: %s, control: %s, time %s added.", saver, system, control, time_value)
+        addon.log.debug("add_saver(): %s, system: %s, control: %s, time %s added.", saver, system, control, time_value)
         next_reset_time = get_next_reset_time(time_value)
         saver_arr.append({'saver': saver, 'system': system, 'control': control, 'time': time_value, 'nextReset': next_reset_time, 'value': 'SNA'})
     else:
-        logging.debug("add_saver(): %s, system: %s, control: %s, time %s updated.", saver, system, control, time_value)
+        addon.log.debug("add_saver(): %s, system: %s, control: %s, time %s updated.", saver, system, control, time_value)
         saver_dict['time'] = time_value
     if debug:
-        logging.debug("saver_arr:")
+        addon.log.debug("saver_arr:")
         for entry in saver_arr:
             print(json.dumps(entry, indent=4, ensure_ascii=False))
     # subscribe topic "/devices/<system>/controls/<control>"
@@ -114,7 +115,7 @@ def remove_saver(client, saver, system, control):
     # If the saver is not found, do nothing.
     saver_dict = get_saver(saver, system, control)
     if saver_dict:
-        logging.debug("remove_saver(): %s, system: %s, control: %s removed.", saver, system, control)
+        addon.log.debug("remove_saver(): %s, system: %s, control: %s removed.", saver, system, control)
         client.unsubscribe(build_topic(system, "controls", control))
         client.unsubscribe(build_topic(system, "controls", control, "meta/unit"))
         # remove topic
@@ -134,7 +135,7 @@ def update_saver(client, system, control, value):
             saver_dict['value'] = "SNA" # set SNA, to make next if true
         if saver_dict['value'] == "SNA" or float(value) < float(saver_dict['value']):
             # new value is less than last min value
-            logging.debug("update_saver(): min, system: %s, control: %s, value: %s updated.", system, control, value)
+            addon.log.debug("update_saver(): min, system: %s, control: %s, value: %s updated.", system, control, value)
             saver_dict['value'] = value
             client.publish(build_topic(system, "controls", control + " min"), value, retain=True)
 
@@ -146,7 +147,7 @@ def update_saver(client, system, control, value):
             saver_dict['value'] = "SNA" # set SNA, to make next if true
         if saver_dict['value'] == "SNA" or float(value) > float(saver_dict['value']):
             # new value is greater than last max value
-            logging.debug("update_saver(): max, system: %s, control: %s, value: %s updated.", system, control, value)
+            addon.log.debug("update_saver(): max, system: %s, control: %s, value: %s updated.", system, control, value)
             saver_dict['value'] = value
             client.publish(build_topic(system, "controls", control + " max"), value, retain=True)
 
@@ -155,18 +156,18 @@ def update_saver_unit(client, system, control, unit):
     """Update the unit of the min/max saver."""
     saver_dict = get_saver("min", system, control)
     if saver_dict:
-        logging.debug("update_saver_unit(): min, system: %s, control: %s, unit: %s updated.", system, control, unit)
+        addon.log.debug("update_saver_unit(): min, system: %s, control: %s, unit: %s updated.", system, control, unit)
         client.publish(build_topic(system, "controls", control + " min", "meta/unit"), unit, retain=True)
 
     saver_dict = get_saver("max", system, control)
     if saver_dict:
-        logging.debug("update_saver_unit(): max, system: %s, control: %s, unit: %s updated.", system, control, unit)
+        addon.log.debug("update_saver_unit(): max, system: %s, control: %s, unit: %s updated.", system, control, unit)
         client.publish(build_topic(system, "controls", control + " max", "meta/unit"), unit, retain=True)
 
 
 def on_connect(client, userdata, flags, reason_code, properties):  # pylint: disable=unused-argument
     """The callback for when the client receives a CONNACK response from the broker."""
-    logging.debug("on_connect(): Connected with result code %s", str(reason_code))
+    addon.log.debug("on_connect(): Connected with result code %s", str(reason_code))
     # Subscribing in on_connect() means that if we lose the connection and
     # reconnect then subscriptions will be renewed.
     # subscribe topic "/sys/<systemId>/<min/max>/<minSystemId>/<minControlId>"
@@ -177,7 +178,7 @@ def on_connect(client, userdata, flags, reason_code, properties):  # pylint: dis
 def on_message(client, userdata, msg):  # pylint: disable=unused-argument
     """The callback for when a PUBLISH message is received from the broker."""
     payload_str = msg.payload.decode("utf-8")  # payload is bytes since API version 2
-    logging.debug("on_message(): "+ msg.topic+ ":"+ payload_str)
+    addon.log.debug("on_message(): "+ msg.topic+ ":"+ payload_str)
     # subscribed topics:
     # /sys/<systemId>/<min/max>/<minSystemId>/<minControlId>, payload: time in hours
     # /devices/<minSystemId>/controls/<minControlId>
@@ -188,10 +189,10 @@ def on_message(client, userdata, msg):  # pylint: disable=unused-argument
     topic.remove("") #  remove this first empty topic
     if topic[0] == "sys" and topic[1] == systemId:
         if payload_str == "":
-            logging.info("removing saver %s", msg.topic)
+            addon.log.info("removing saver %s", msg.topic)
             remove_saver(client, topic[2], topic[3], topic[4])
         else:
-            logging.info("adding saver %s: %s", msg.topic, payload_str)
+            addon.log.info("adding saver %s: %s", msg.topic, payload_str)
             add_saver(client, topic[2], topic[3], topic[4], payload_str)
     elif topic[0] == "devices" and topic[2] == "controls":
         if len(topic) == 6 and topic[4] == "meta":
@@ -200,12 +201,12 @@ def on_message(client, userdata, msg):  # pylint: disable=unused-argument
         else:
             update_saver(client, topic[1], topic[3], payload_str)
     else:
-        print("[ERROR] on_message(): Unkown topic '%s'.", msg.topic)
+        addon.log.error("on_message(): Unkown topic '%s'.", msg.topic)
 
 
 def on_publish(client, userdata, mid, reason_code, properties):  # pylint: disable=unused-argument
     """The callback for when a message is published to the broker."""
-    logging.debug("on_publish(): message send %s", str(mid))
+    addon.log.debug("on_publish(): message send %s", str(mid))
 
 
 def parse_args():
@@ -222,26 +223,26 @@ args = parse_args()
 if args.d:
     debug = True
 if debug:
-    logging.getLogger().setLevel(logging.DEBUG)
-    logging.info("Debug output enabled.")
+    addon.log.setLevel(addon.DEBUG)
+    addon.log.info("Debug output enabled.")
 if args.brokerHost is not None:
-    logging.debug("set config.host = %s", args.brokerHost)
-    config.mqtt_host = args.brokerHost
+    addon.log.debug("set config.host = %s", args.brokerHost)
+    addon.mqtt_host = args.brokerHost
 if args.brokerPort is not None:
-    logging.debug("set config.port = %s", args.brokerPort)
-    config.mqtt_port = args.brokerPort
+    addon.log.debug("set config.port = %s", args.brokerPort)
+    addon.mqtt_port = args.brokerPort
 
 # connect to MQTT broker
 mqttc = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION2)
 mqttc.on_connect = on_connect
 mqttc.on_message = on_message
 mqttc.on_publish = on_publish
-if config.mqtt_ca_certs != "":
+if addon.mqtt_ca_certs != "":
     #mqttc.tls_insecure_set(True) # Do not use this "True" in production!
-    mqttc.tls_set(config.mqtt_ca_certs, certfile=None, keyfile=None, cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLSv1_2, ciphers=None)
-mqttc.username_pw_set(config.mqtt_user, password=config.mqtt_pwd)
-logging.debug("Connecting to host '%s', port '%s'", config.mqtt_host, config.mqtt_port)
-mqttc.connect(config.mqtt_host, port=config.mqtt_port)
+    mqttc.tls_set(addon.mqtt_ca_certs, certfile=None, keyfile=None, cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLSv1_2, ciphers=None)
+mqttc.username_pw_set(addon.mqtt_user, password=addon.mqtt_pwd)
+addon.log.debug("Connecting to host '%s', port '%s'", addon.mqtt_host, addon.mqtt_port)
+mqttc.connect(addon.mqtt_host, port=addon.mqtt_port)
 mqttc.loop_start()
 
 while True:
@@ -249,7 +250,7 @@ while True:
     try:
         time.sleep(1000)
     except (KeyboardInterrupt, SystemExit):
-        print('\nKeyboardInterrupt found! Stopping program.')
+        addon.log.info('\nKeyboardInterrupt found! Stopping program.')
         break
 
 # wait until all queued topics are published
