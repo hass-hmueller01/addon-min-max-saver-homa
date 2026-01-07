@@ -1,6 +1,6 @@
 # https://developers.home-assistant.io/docs/add-ons/configuration#add-on-config
 name: HomA MQTT min/max saver
-version: 1.0.0
+version: 1.1.0
 slug: min-max-saver-homa
 description: A universal min/max saver for the HomA MQTT framework
 url: https://github.com/hass-hmueller01/addon-min-max-saver-homa
