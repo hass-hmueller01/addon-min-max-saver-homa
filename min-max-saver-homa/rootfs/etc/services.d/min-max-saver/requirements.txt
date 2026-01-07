@@ -1,0 +1,6 @@
+# Runtime Python dependencies for min-max-saver-homa
+
+paho-mqtt>=2.0
+
+# Helper library installed from Git
+git+https://github.com/hass-hmueller01/hass-addon-helper.git@main
