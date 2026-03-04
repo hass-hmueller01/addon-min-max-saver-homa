@@ -23,7 +23,7 @@ RUN \
     pip3 install -r requirements.txt
 
 # Cleanup
-RUN apk del git && \
+RUN apk del --rdepends git && \
     apk cache clean && \
     rm -rf /var/cache/apk/* /tmp/* /root/.cache/pip
 
